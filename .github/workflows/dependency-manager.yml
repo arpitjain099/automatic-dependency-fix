@@ -10,13 +10,13 @@ on:
       ORG_NAME:
         description: "Name of the organization (if USER_MODE=false)"
         required: false
-        default: "GitHub org name, example: azure"
+        default: "YourOrgName"
       MY_NAME:
         description: "Your name for co-authored merges"
         required: false
-        default: "Your name on GitHub"
+        default: "YourName"
       MY_EMAIL:
-        description: "Your email associated with GitHub account"
+        description: "Your GitHub email for co-authored merges"
         required: false
         default: "3242828+arpitjain099@users.noreply.github.com"
 
@@ -28,35 +28,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Check out the code
       - uses: actions/checkout@v3
 
-      # 2) Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
 
-      # 3) Install dependencies
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install requests
 
-      # 4) Run the script
       - name: Run Dependabot Manager Script
         run: |
           python dependency-fix.py
         env:
+          # Provide the GitHub token from your repository's secret
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          
-          # Take inputs from the manual run (if provided). If not manual, defaults apply
+
+          # Take inputs from the manual run or default to fallback
           USER_MODE: ${{ github.event.inputs.USER_MODE || 'true' }}
-          ORG_NAME: ${{ github.event.inputs.ORG_NAME || 'yourorg' }}
-          MY_NAME: ${{ github.event.inputs.MY_NAME || 'Arpit Jain' }}
+          ORG_NAME: ${{ github.event.inputs.ORG_NAME || 'YourOrgName' }}
+          MY_NAME: ${{ github.event.inputs.MY_NAME || 'YourName' }}
           MY_EMAIL: ${{ github.event.inputs.MY_EMAIL || '3242828+arpitjain099@users.noreply.github.com' }}
 
-          # Additional environment overrides if desired:
+          # Additional environment overrides
           ENABLE_STEP_SYNC_FORKS: "true"
           ENABLE_STEP_ENABLE_DEPENDABOT: "true"
           ENABLE_STEP_MERGE_DEPENDABOT_PRS: "true"
