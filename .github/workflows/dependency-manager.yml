@@ -10,13 +10,13 @@ on:
       ORG_NAME:
         description: "Name of the organization (if USER_MODE=false)"
         required: false
-        default: "yourorg"
+        default: "GitHub org name, example: azure"
       MY_NAME:
         description: "Your name for co-authored merges"
         required: false
-        default: "Arpit Jain"
+        default: "Your name on GitHub"
       MY_EMAIL:
-        description: "Your email for co-authored merges"
+        description: "Your email associated with GitHub account"
         required: false
         default: "3242828+arpitjain099@users.noreply.github.com"
 
