@@ -18,7 +18,7 @@ on:
       MY_EMAIL:
         description: "Your GitHub email for co-authored merges"
         required: false
-        default: "3242828+arpitjain099@users.noreply.github.com"
+        default: "YourGitHubEmail"
 
   schedule:
     - cron: "5 1 * * 0"  # Sunday 01:05 UTC

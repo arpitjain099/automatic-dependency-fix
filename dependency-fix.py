@@ -8,7 +8,7 @@ This script automates:
 3. Merging Dependabot PRs (optionally with a co-author line for your contribution graph).
 
 Configuration is taken from environment variables (see below).
-No secrets are hardcoded – the GitHub token, name/email, user/org mode, etc.
+No secrets or personal data are hardcoded – the GitHub token, name/email, user/org mode, etc.
 """
 
 import os
@@ -20,6 +20,16 @@ def str_to_bool(val):
     """Utility to convert environment string (e.g. 'true'/'false') to boolean."""
     return str(val).lower() in ["true", "1", "yes"]
 
+def safe_repo_name(repo):
+    """
+    Returns a string for the repository.
+    If the repo is private, returns "[PRIVATE]"; otherwise, returns "owner/repo".
+    """
+    if repo.get("private"):
+        return "[PRIVATE]"
+    else:
+        return f"{repo['owner']['login']}/{repo['name']}"
+
 # === Read Configuration from Environment ===
 
 GITHUB_TOKEN = os.environ.get("MY_GITHUB_TOKEN")  # Required
@@ -28,6 +38,7 @@ MY_EMAIL = os.environ.get("MY_EMAIL", "")
 USER_MODE = str_to_bool(os.environ.get("USER_MODE", "true"))
 ORG_NAME = os.environ.get("ORG_NAME", "")
 EXCLUDED_REPOS_FILE = os.environ.get("EXCLUDED_REPOS_FILE", "excluded_repos.txt")
+INCLUDED_REPOS_FILE = os.environ.get("INCLUDED_REPOS_FILE", "included_repos.txt")
 
 if not GITHUB_TOKEN:
     print("ERROR: Missing environment variable MY_GITHUB_TOKEN. Exiting.")
@@ -48,6 +59,32 @@ POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "10"))
 MERGE_METHOD = os.environ.get("MERGE_METHOD", "merge")
 
 COUNT_MERGES_AS_PERSONAL_COMMITS = str_to_bool(os.environ.get("COUNT_MERGES_AS_PERSONAL_COMMITS", "true"))
+
+# ----------------------------------------------------- #
+
+def load_included_repos(file_path):
+    """
+    Reads lines from an 'included_repos.txt' file, returning a set of "owner/repo" that should be processed.
+    Ignores empty lines and lines starting with '#'.
+    """
+    included = set()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                included.add(line)
+    except FileNotFoundError:
+        print(f"No inclusion file found at: {file_path}. Proceeding with all repositories.")
+    return included
+
+# In your main() function or after listing repos, filter by inclusion if provided:
+def filter_repos_by_inclusion(repos, included):
+    if not included:
+        return repos
+    filtered = [r for r in repos if f"{r['owner']['login']}/{r['name']}" in included]
+    return filtered
 
 # ----------------------------------------------------- #
 
@@ -77,6 +114,7 @@ def list_repos():
     """
     all_repos = []
     page = 1
+
     while True:
         if USER_MODE:
             url = f"{BASE_URL}/user/repos"
@@ -97,7 +135,7 @@ def list_repos():
         all_repos.extend(repos_page)
         page += 1
 
-    # Filter to repos where the user/token has push permission
+    # Filter to repos where the token has push permission
     writable_repos = [
         r for r in all_repos
         if r.get("permissions", {}).get("push", False)
@@ -116,21 +154,21 @@ def sync_fork(owner, repo_name, branch):
 
     if resp.status_code == 200:
         json_resp = resp.json()
-        print(f"✔️  Synced fork {owner}/{repo_name} (branch '{branch}'), "
-              f"merge commit: {json_resp.get('merge_commit_sha')}")
+        print(f"✔️  Synced fork {owner}/{repo_name} (branch '{branch}'), merge commit: {json_resp.get('merge_commit_sha')}")
     else:
-        print(f"❌  Failed to sync fork {owner}/{repo_name}. "
-              f"Status: {resp.status_code} {resp.text}")
+        print(f"❌  Failed to sync fork {owner}/{repo_name}. Status: {resp.status_code} {resp.text}")
 
 def step_sync_forks(repos, excluded):
     """
     For each repo that is a fork, attempt to sync from upstream.
+    Private repo names are masked.
     """
     print("\n=== STEP 1: SYNC FORKS ===")
     for r in repos:
+        display_name = safe_repo_name(r)
         full_name = f"{r['owner']['login']}/{r['name']}"
         if full_name in excluded:
-            print(f"Skipping fork sync for {full_name} (excluded).")
+            print(f"Skipping fork sync for {display_name} (excluded).")
             continue
 
         if r["fork"]:
@@ -139,61 +177,58 @@ def step_sync_forks(repos, excluded):
             default_branch = r["default_branch"]  # e.g. main, master, etc.
             parent_html_url = r["parent"]["html_url"] if "parent" in r else None
 
-            print(f"Repo {owner}/{repo_name} is a fork of {parent_html_url}. "
-                  f"Syncing default branch '{default_branch}'...")
+            print(f"Repo {display_name} is a fork of {parent_html_url}. Syncing default branch '{default_branch}'...")
             sync_fork(owner, repo_name, default_branch)
         else:
-            print(f"Repo {full_name} is not a fork. Skipping fork sync.")
+            print(f"Repo {display_name} is not a fork. Skipping fork sync.")
 
 # ============== STEP 2: ENABLE DEPENDABOT SECURITY UPDATES ============== #
 
-def enable_vulnerability_alerts(owner, repo_name):
+def enable_vulnerability_alerts(owner, repo_name, display_name):
     """
-    PUT /repos/{owner}/{repo}/vulnerability-alerts
+    PUT /repos/{owner}/{repo}/vulnerability-alerts.
     """
     url = f"{BASE_URL}/repos/{owner}/{repo_name}/vulnerability-alerts"
     resp = requests.put(url, headers=HEADERS)
     if resp.status_code == 204:
-        print(f"✔️  Enabled vulnerability alerts on {owner}/{repo_name}")
+        print(f"✔️  Enabled vulnerability alerts on {display_name}")
     else:
-        print(f"❌  Failed to enable vulnerability alerts on {owner}/{repo_name}: "
-              f"{resp.status_code} {resp.text}")
+        print(f"❌  Failed to enable vulnerability alerts on {display_name}: {resp.status_code} {resp.text}")
 
-def enable_automated_security_fixes(owner, repo_name):
+def enable_automated_security_fixes(owner, repo_name, display_name):
     """
-    PUT /repos/{owner}/{repo}/automated-security-fixes
+    PUT /repos/{owner}/{repo}/automated-security-fixes.
     """
     url = f"{BASE_URL}/repos/{owner}/{repo_name}/automated-security-fixes"
     resp = requests.put(url, headers=HEADERS)
     if resp.status_code == 204:
-        print(f"✔️  Enabled automated security fixes on {owner}/{repo_name}")
+        print(f"✔️  Enabled automated security fixes on {display_name}")
     else:
-        print(f"❌  Failed to enable automated security fixes on {owner}/{repo_name}: "
-              f"{resp.status_code} {resp.text}")
+        print(f"❌  Failed to enable automated security fixes on {display_name}: {resp.status_code} {resp.text}")
 
 def step_enable_dependabot_security_updates(repos, excluded):
     """
     Enables vulnerability alerts and automated security fixes for each repo.
+    Private repo names are masked.
     """
     print("\n=== STEP 2: ENABLE DEPENDABOT SECURITY UPDATES ===")
     for r in repos:
+        display_name = safe_repo_name(r)
         full_name = f"{r['owner']['login']}/{r['name']}"
         if full_name in excluded:
-            print(f"Skipping Dependabot setup for {full_name} (excluded).")
+            print(f"Skipping Dependabot setup for {display_name} (excluded).")
             continue
-
         owner = r["owner"]["login"]
         repo_name = r["name"]
-        print(f"\n[Enabling Dependabot for] {full_name}")
-
-        enable_vulnerability_alerts(owner, repo_name)
-        enable_automated_security_fixes(owner, repo_name)
-
+        print(f"\n[Enabling Dependabot for] {display_name}")
+        enable_vulnerability_alerts(owner, repo_name, display_name)
+        enable_automated_security_fixes(owner, repo_name, display_name)
+        
 # ============== STEP 3: MERGE DEPENDABOT PRs ============== #
 
 def get_open_prs(owner, repo):
     """
-    List open pull requests, sorted by creation date ascending, with pagination.
+    Lists open pull requests, sorted by creation date (ascending), with pagination.
     """
     all_prs = []
     page = 1
@@ -223,17 +258,17 @@ def get_pr_details(owner, repo, pr_number):
 
 def get_check_runs(owner, repo, commit_sha):
     """
-    Return check runs for a given commit.
+    Returns check runs for a given commit.
     """
     url = f"{BASE_URL}/repos/{owner}/{repo}/commits/{commit_sha}/check-runs"
     resp = requests.get(url, headers=HEADERS)
     resp.raise_for_status()
     return resp.json().get("check_runs", [])
 
-def wait_for_mergeability(owner, repo, pr_number, timeout=30, poll_interval=10):
+def wait_for_mergeability(owner, repo, pr_number, timeout=TIMEOUT_SECONDS, poll_interval=POLL_INTERVAL_SECONDS):
     """
-    Poll until the PR is mergeable (mergeable_state == 'clean'),
-    or failing checks appear, or we time out.
+    Polls until the PR is mergeable (mergeable_state == 'clean'),
+    or failing checks appear, or it times out.
     Returns True if mergeable, False otherwise.
     """
     start_time = time.time()
@@ -263,11 +298,11 @@ def wait_for_mergeability(owner, repo, pr_number, timeout=30, poll_interval=10):
         print(f"⏳  Waiting for PR #{pr_number}... (mergeable_state='{mergeable_state}')")
         time.sleep(poll_interval)
 
-def merge_pr(owner, repo, pr_number, pr_title, my_name, my_email):
+def merge_pr(owner, repo, pr_number, pr_title, my_name, my_email, display_name):
     """
-    Merges a Dependabot PR. If COUNT_MERGES_AS_PERSONAL_COMMITS=True,
-    do a squash merge with a co-author line to possibly count as your commit.
-    Otherwise, use the MERGE_METHOD without a co-author line.
+    Merges a Dependabot PR. If COUNT_MERGES_AS_PERSONAL_COMMITS is True,
+    does a squash merge with a co-author line to potentially count as your commit.
+    Otherwise, uses MERGE_METHOD without a co-author line.
     """
     if COUNT_MERGES_AS_PERSONAL_COMMITS:
         final_method = "squash"
@@ -289,26 +324,28 @@ def merge_pr(owner, repo, pr_number, pr_title, my_name, my_email):
     if resp.status_code == 200:
         merge_info = resp.json()
         if merge_info.get("merged"):
-            print(f"✔️  Successfully merged PR #{pr_number} via {final_method} merge.")
+            print(f"✔️  Successfully merged PR #{pr_number} in {display_name} via {final_method} merge.")
         else:
-            print(f"❌  API responded but did not merge PR #{pr_number}: {merge_info}")
+            print(f"❌  API responded but did not merge PR #{pr_number} in {display_name}: {merge_info}")
     else:
-        print(f"❌  Merge API call failed for PR #{pr_number}: {resp.status_code} {resp.text}")
+        print(f"❌  Merge API call failed for PR #{pr_number} in {display_name}: {resp.status_code} {resp.text}")
 
 def step_merge_dependabot_prs(repos, excluded):
     """
     Finds and merges Dependabot PRs for each repo (if checks pass).
+    Repository names for private repos are masked.
     """
     print("\n=== STEP 3: MERGE DEPENDABOT PRs ===")
     for r in repos:
+        display_name = safe_repo_name(r)
         full_name = f"{r['owner']['login']}/{r['name']}"
         if full_name in excluded:
-            print(f"Skipping Dependabot merges for {full_name} (excluded).")
+            print(f"Skipping Dependabot merges for {display_name} (excluded).")
             continue
 
         owner = r["owner"]["login"]
         repo_name = r["name"]
-        print(f"\n[Checking Dependabot PRs in] {full_name}")
+        print(f"\n[Checking Dependabot PRs in] {display_name}")
 
         open_prs = get_open_prs(owner, repo_name)
         dependabot_prs = [pr for pr in open_prs if pr["user"]["login"] == "dependabot[bot]"]
@@ -326,7 +363,7 @@ def step_merge_dependabot_prs(repos, excluded):
                                               timeout=TIMEOUT_SECONDS,
                                               poll_interval=POLL_INTERVAL_SECONDS)
             if can_merge:
-                merge_pr(owner, repo_name, pr_number, pr_title, MY_NAME, MY_EMAIL)
+                merge_pr(owner, repo_name, pr_number, pr_title, MY_NAME, MY_EMAIL, display_name)
             else:
                 print(f"Skipping PR #{pr_number} due to failing checks or timeout.")
 
@@ -334,30 +371,42 @@ def step_merge_dependabot_prs(repos, excluded):
 
 def main():
     print("=== STARTING SCRIPT ===")
-
+    
     # 1) Load the exclusion list
     excluded_repos = load_excluded_repos(EXCLUDED_REPOS_FILE)
     if excluded_repos:
         print("Excluding these repos:")
         for er in excluded_repos:
             print(f"  - {er}")
-
-    # 2) List Repos
+    
+    # 2) Load the inclusion list
+    included_repos = load_included_repos("included_repos.txt")
+    if included_repos:
+        print("Including only these repos:")
+        for ir in included_repos:
+            print(f"  - {ir}")
+    
+    # 3) List Repos
     repos = list_repos()
     print(f"\nFound {len(repos)} repos with push access (USER_MODE={USER_MODE}).")
-
-    # 3) Step 1: Sync Forks
+    
+    # 4) Filter repos by the inclusion list if it is provided
+    if included_repos:
+        repos = [r for r in repos if f"{r['owner']['login']}/{r['name']}" in included_repos]
+        print(f"After inclusion filtering, {len(repos)} repos remain.")
+    
+    # 5) Step 1: Sync Forks
     if ENABLE_STEP_SYNC_FORKS:
         step_sync_forks(repos, excluded_repos)
-
-    # 4) Step 2: Enable Dependabot Security Updates
+    
+    # 6) Step 2: Enable Dependabot Security Updates
     if ENABLE_STEP_ENABLE_DEPENDABOT:
         step_enable_dependabot_security_updates(repos, excluded_repos)
-
-    # 5) Step 3: Merge Dependabot PRs
+    
+    # 7) Step 3: Merge Dependabot PRs
     if ENABLE_STEP_MERGE_DEPENDABOT_PRS:
         step_merge_dependabot_prs(repos, excluded_repos)
-
+    
     print("=== ALL STEPS COMPLETED ===")
 
 if __name__ == "__main__":
