@@ -31,6 +31,7 @@ Start patching smarter. Get the credit you deserve.
 - [Excluded and Included Repositories](#excluded-and-included-repositories)
 - [Running in an Organization Context](#running-in-an-organization-context)
 - [Caution and Best Practices](#caution-and-best-practices)
+- [Comparison: SecureCred vs. Dependabot vs. RenovateBot](#comparison-securecred-vs-dependabot-vs-renovatebot)
 - [License](#license)
 
 ---
@@ -201,6 +202,32 @@ Automatically merging dependency updates can sometimes lead to unexpected issues
 - **Review Changes:** Always review the changes that Dependabot proposes before merging.
 - **Use an Exclusion List:** It is highly recommended to maintain an `excluded_repos.txt` file with a list of repositories where automatic updates should be disabled (e.g., legacy projects, production-critical systems, or repos with complex dependency management).
 - **Test Thoroughly:** Consider running dependency updates in a staging environment before applying them to your main branches.
+
+---
+
+## 🔄 Comparison: SecureCred vs. Dependabot vs. RenovateBot
+
+> ✅ **Note**: SecureCred is *not* a replacement for Dependabot or RenovateBot — it enhances Dependabot by automating common tasks and helping developers build better security habits (and GitHub street cred).
+
+| Feature / Criteria                      | ✅ SecureCred (your tool)                      | 🛡️ Dependabot (GitHub-native)                 | 🧠 RenovateBot (by Mend)                      |
+|----------------------------------------|-----------------------------------------------|-----------------------------------------------|-----------------------------------------------|
+| 🔧 **Setup Complexity**                | Easy – GitHub Actions + script                | Easiest – Native integration                  | Moderate – requires app install or self-hosting |
+| 🤝 **Built On**                        | ✅ Uses Dependabot PRs                         | GitHub-native                                 | Fully custom engine                           |
+| 🛡️ **Enables Security Alerts**        | ✅ Yes (via GitHub API)                        | ✅ Yes                                         | ❌ No                                          |
+| ✅ **Auto-Merges Dependabot PRs**      | ✅ Yes (optionally co-authored)                | ⚠️ Manual unless extended with Actions         | ✅ Yes (fully configurable)                    |
+| 🔄 **Syncs Forks with Upstream**       | ✅ Yes (unique feature)                        | ❌ No                                          | ❌ No                                          |
+| 📈 **Boosts GitHub Contributions**     | ✅ Yes – co-author commits                     | ❌ No                                          | ❌ No                                          |
+| 🧪 **Promotes Security Discipline**    | ✅ Yes – structured, visible hygiene           | ⚠️ Passive (unless reviewed/merged manually)   | ✅ Yes – if configured                         |
+| 💼 **Professional Visibility**         | ✅ Encourages visibility via graph             | ❌ Not tracked to user                         | ❌ Bot-only commits                            |
+| ⚙️ **Package Manager Support**         | Same as Dependabot                            | ✅ Wide (npm, pip, etc.)                       | ✅ Very wide                                  |
+| 🧠 **Smart Grouping**                  | ❌ No                                          | ❌ No                                          | ✅ Yes                                         |
+| 🕹️ **Merge Behavior Customization**   | ✅ Via env vars (e.g., squash, timeout)        | ⚠️ Limited                                     | ✅ Very fine-grained                          |
+| 🔐 **Token Security**                 | ✅ Uses GitHub Secrets                         | ✅ Native                                      | ✅ Configurable                                |
+| 🚀 **Self-Hostable**                  | ✅ Yes (GitHub Actions or CLI)                | ❌ GitHub-only                                 | ✅ Yes                                         |
+| 📤 **Org-Wide Usage**                 | ✅ Yes (via ORG_NAME + USER_MODE)              | ✅ Yes                                         | ✅ Yes                                         |
+| 🆓 **Free & Open Source**             | ✅ Yes                                         | ✅ Yes                                         | ✅ Yes                                         |
+| 🧩 **Integrates with CI/CD**          | ✅ GitHub Actions                              | ⚠️ Requires setup                              | ✅ Easily integrates                           |
+| 👤 **Attribution of Work**            | ✅ Developer (via co-author)                   | ❌ Dependabot bot                              | ❌ Renovate bot                                |
 
 ---
 
