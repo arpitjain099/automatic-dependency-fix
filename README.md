@@ -1,6 +1,6 @@
 # Secure-Cred Dependabot Manager
 
-🔒 Secure your repos. 💪 Build your street cred.
+🔒 Secure your repos. 💪 Build your GitHub street cred.
 
 A **Python script** and **GitHub Actions workflow** that helps automate:
 
