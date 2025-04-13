@@ -21,7 +21,7 @@ on:
         default: "YourGitHubEmail"
 
   schedule:
-    - cron: "5 1 * * 0"  # Sunday 01:05 UTC
+    - cron: "0 0 * * *"  # Daily 00:00 UTC
 
 jobs:
   manage-dependabot:
